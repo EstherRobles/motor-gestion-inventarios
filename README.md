@@ -1,6 +1,9 @@
 # motor-gestion-inventarios
 Sistema de gestión de inventario bajo la metodología «Lean Manufacturing», gestionado a través de un motor analítico en Python y Streamlit para la conciliación en tiempo real de tres capas (Catálogo, ERP y Conteo Físico). Optimiza la disciplina operativa mediante la clasificación automática de desvíos y stock mal ubicado.  
 
+🚀 **Link de la aplicación en producción:** [🌐 Motor de Gestión de Inventarios]
+(https://motor-gestion-inventarios-qvcnzj5nesapuwgsmxsfwc.streamlit.app/) 🎈
+
 ## 🎯 Enfoque Metodológico (Lean Manufacturing)
 El motor analítico se alinea directamente con los principios de la manufactura esbelta, actuando como una herramienta de control visual y resolución de problemas enfocado en:
 * 📉 **Reducción de Desperdicios:** Identifica con precisión materiales mal ubicados, reduciendo los tiempos muertos y los movimientos innecesarios de operarios y autoelevadores.
@@ -43,11 +46,11 @@ Para que el motor ejecute la conciliación de forma correcta, los archivos de en
 ---
 ## 📊 Funcionalidades Clave y Agilización de la Auditoría
 
-Conciliación Automatizada: Centraliza y cruza las tres fuentes de datos en segundos, eliminando el uso de buscarv/vlookup complejos y propensos a error en Excel. 
-Agilización del Resultado: Reduce el tiempo de emisión del reporte final de auditoría, permitiendo al equipo de almacén realizar re-conteos inmediatos mientras la operación sigue en caliente. 
-Clasificación Automática de Desvíos: Separa inconsistencias administrativas (errores de sistema) de diferencias físicas reales (faltantes o sobrantes).
-Detección de Stock Mal Ubicado: Alerta si un SKU se encuentra físicamente en un localizador diferente al asignado por el sistema ERP. 
-Impacto Financiero: Traduce las diferencias físicas a valores monetarios para priorizar el análisis de los desvíos con mayor criticidad económica.
+* **Conciliación Automatizada: Centraliza y cruza las tres fuentes de datos en segundos, eliminando el uso de buscarv/vlookup complejos y propensos a error en Excel. 
+* **Agilización del Resultado: Reduce el tiempo de emisión del reporte final de auditoría, permitiendo al equipo de almacén realizar re-conteos inmediatos mientras la operación sigue en caliente. 
+* **Clasificación Automática de Desvíos: Separa inconsistencias administrativas (errores de sistema) de diferencias físicas reales (faltantes o sobrantes).
+* **Detección de Stock Mal Ubicado: Alerta si un SKU se encuentra físicamente en un localizador diferente al asignado por el sistema ERP. 
+* **Impacto Financiero: Traduce las diferencias físicas a valores monetarios para priorizar el análisis de los desvíos con mayor criticidad económica.
 
 ---
 ## 🛠️ Tecnologías Utilizadas
