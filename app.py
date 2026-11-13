@@ -98,11 +98,13 @@ if file_catalogo and file_teorico and file_fisico:
         'INVENTORY ORGANIZATION CODE': 'ORGANIZACION',
         'SUBINVENTORY': 'SUBINVENTARIO',
         'COUNTED BY': 'CONTADO_POR',
+        'Recuento realizado por': 'CONTADO_POR',
         'FECHA': 'FECHA_CONTEO',
         'FECHA DE CONTEO': 'FECHA_CONTEO',
         'COUNT DATE': 'FECHA_CONTEO',
         'TRANSACTION DATE': 'FECHA_TRX',
         'QUANTITY': 'CANTIDAD_TRX',
+        'CANTIDAD': 'CANTIDAD_TRX',
         'TRANSACTION TYPE': 'TIPO_TRX',
         'CAT. TRANSACCION': 'CAT_TRX',
         'TRANSACTION SOURCE REFERENCE': 'REF_ORIGEN_TRX',
@@ -348,7 +350,7 @@ if file_catalogo and file_teorico and file_fisico:
         lineas_revisar = len(df_cruce[df_cruce['RESULTADO'].str.contains("REVISAR LOTES")])
         lineas_mov_post = len(df_cruce[df_cruce['RESULTADO'].str.contains("POST-CONTEO")])
         lineas_mal = len(df_cruce[df_cruce['RESULTADO'].str.contains("MAL UBICADO")])
-        lineas_no_cat = len(df_cruce[df_cruce['RESULTADO'] == "SKU NO CATALOGADO"])
+        lineas_no_cat = len(df_cruce[df_cruce['RESULTADO'] == "SOBRANTE TOTAL"])
         
         m1.metric("Posiciones OK", f"{lineas_ok}")
         m2.metric("Revisar Lotes/Proy.", f"{lineas_revisar}")
