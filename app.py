@@ -30,6 +30,29 @@ def agrupar_textos(serie):
     unicos = list(dict.fromkeys(vals))
     return " | ".join(unicos) if unicos else ""
 
+# Función blindada para limpiar números (soporta Excel nativo y CSV con miles '.' y decimal ',')
+def limpiar_numero(serie):
+    if pd.api.types.is_numeric_dtype(serie):
+        return serie.fillna(0)
+    
+    def parsear(val):
+        if pd.isna(val):
+            return 0.0
+        s = str(val).strip().replace('$', '').replace(' ', '')
+        if s == '':
+            return 0.0
+        # Si tiene ambos separadores (ej: "1.541,82"), quita el punto de miles y cambia coma por punto
+        if ',' in s and '.' in s:
+            s = s.replace('.', '').replace(',', '.')
+        elif ',' in s:
+            s = s.replace(',', '.')
+        try:
+            return float(s)
+        except ValueError:
+            return 0.0
+
+    return serie.apply(parsear)
+
 # El motor arranca únicamente cuando las 3 fuentes están presentes
 if file_catalogo and file_teorico and file_fisico:
     
@@ -40,21 +63,43 @@ if file_catalogo and file_teorico and file_fisico:
     
     st.info("📊 Inicializando cruce relacional y análisis de consistencia de inventario...")
 
-    # 2. Normalización de Encabezados (Elimina espacios, fuerza mayúsculas y unifica variantes)
+    # 2. Normalización de Encabezados (Soporta variantes exactas del ERP, Conteo y Catálogo)
     renombres = {
+        'CODIGO': 'SKU',
+        'CÓDIGO': 'SKU',
+        'ITEM': 'SKU',
         'UBICACIÓN': 'LOCALIZADOR',
         'UBICACION': 'LOCALIZADOR',
+        'LOCALIZACION': 'LOCALIZADOR',
+        'LOCALIZACIÓN': 'LOCALIZADOR',
+        'LOCATOR': 'LOCALIZADOR',
         'UNIT_COST': 'COSTO_UNITARIO',
         'UNIDAD DE MEDIDA': 'UNIDAD_DE_MEDIDA',
+        'UNIDAD_MEDIDA': 'UNIDAD_DE_MEDIDA',
         'UOM': 'UNIDAD_DE_MEDIDA',
+        'UMD': 'UNIDAD_DE_MEDIDA',
         'SERIAL NUMBER': 'SERIAL_NUMBER',
         'LOTE': 'LOT',
-        'ORGANIZACIÓN': 'ORGANIZACION'
+        'ORGANIZACIÓN': 'ORGANIZACION',
+        'ORG': 'ORGANIZACION',
+        'INVENTORY ORGANIZATION CODE': 'ORGANIZACION',
+        'SUBINVENTORY': 'SUBINVENTARIO',
+        'COUNTED BY': 'CONTADO_POR',
+        'DESCRIPCION': 'DESCRIPCION_ARCHIVO'
     }
     
     for df in [df_cat, df_teo, df_fis]:
         df.columns = df.columns.astype(str).str.strip().str.upper()
         df.rename(columns=renombres, inplace=True)
+
+    # Restaurar nombre DESCRIPCION específicamente en el Catálogo Maestro
+    if 'DESCRIPCION_ARCHIVO' in df_cat.columns:
+        df_cat.rename(columns={'DESCRIPCION_ARCHIVO': 'DESCRIPCION'}, inplace=True)
+
+    # Asegurar columnas opcionales de auditoría en Conteo Físico por si algún archivo no las trae
+    for col_opt in ['CONTADO_POR', 'SECUENCIA', 'UNIDAD_DE_MEDIDA']:
+        if col_opt not in df_fis.columns:
+            df_fis[col_opt] = ''
 
     # 3. Validación de columnas mínimas requeridas por tabla
     cols_cat_req = {'SKU', 'DESCRIPCION', 'COSTO_UNITARIO'}
@@ -62,7 +107,7 @@ if file_catalogo and file_teorico and file_fisico:
         'SKU', 'LOCALIZADOR', 'CANTIDAD', 'PROYECTO', 'TAREA', 
         'ORGANIZACION', 'SUBINVENTARIO', 'UNIDAD_DE_MEDIDA', 'SERIAL_NUMBER', 'LOT'
     }
-    cols_fis_req = {'SKU', 'LOCALIZADOR', 'CONTEO'}
+    cols_fis_req = {'ORGANIZACION', 'SUBINVENTARIO', 'SKU', 'LOCALIZADOR', 'CONTEO'}
 
     cols_cat_ok = cols_cat_req.issubset(df_cat.columns)
     cols_teo_ok = cols_teo_req.issubset(df_teo.columns)
@@ -74,18 +119,24 @@ if file_catalogo and file_teorico and file_fisico:
         df_cat['SKU'] = df_cat['SKU'].fillna('').astype(str).str.strip().str.upper()
         
         for df in [df_teo, df_fis]:
-            df['SKU'] = df['SKU'].fillna('').astype(str).str.strip().str.upper()
-            df['LOCALIZADOR'] = df['LOCALIZADOR'].fillna('').astype(str).str.strip().str.upper()
+            for col_llave in ['ORGANIZACION', 'SUBINVENTARIO', 'SKU', 'LOCALIZADOR']:
+                df[col_llave] = df[col_llave].fillna('').astype(str).str.strip().str.upper()
 
-        # Limpieza de las nuevas columnas de texto en ERP
-        cols_extra_teo = ['PROYECTO', 'TAREA', 'ORGANIZACION', 'SUBINVENTARIO', 'UNIDAD_DE_MEDIDA', 'SERIAL_NUMBER', 'LOT']
+        # Limpieza de columnas adicionales en ERP y Conteo
+        cols_extra_teo = ['PROYECTO', 'TAREA', 'UNIDAD_DE_MEDIDA', 'SERIAL_NUMBER', 'LOT']
         for col in cols_extra_teo:
             df_teo[col] = df_teo[col].fillna('').astype(str).str.strip().str.upper()
 
-        # 5. Forzar tipos numéricos para cálculos matemáticos seguros
-        df_cat['COSTO_UNITARIO'] = pd.to_numeric(df_cat['COSTO_UNITARIO'], errors='coerce').fillna(0)
-        df_teo['CANTIDAD'] = pd.to_numeric(df_teo['CANTIDAD'], errors='coerce').fillna(0)
-        df_fis['CONTEO'] = pd.to_numeric(df_fis['CONTEO'], errors='coerce').fillna(0)
+        for col in ['CONTADO_POR', 'SECUENCIA', 'UNIDAD_DE_MEDIDA']:
+            df_fis[col] = df_fis[col].fillna('').astype(str).str.strip().str.upper()
+
+        # 5. Forzar tipos numéricos (soportando formato miles '.' y decimal ',')
+        df_cat['COSTO_UNITARIO'] = limpiar_numero(df_cat['COSTO_UNITARIO'])
+        df_teo['CANTIDAD'] = limpiar_numero(df_teo['CANTIDAD'])
+        df_fis['CONTEO'] = limpiar_numero(df_fis['CONTEO'])
+
+        # Deduplicar Catálogo por SKU por seguridad
+        df_cat_unico = df_cat.drop_duplicates(subset=['SKU'], keep='first')
 
         # --- MOTOR LOGÍSTICO AVANZADO ---
         
@@ -93,11 +144,11 @@ if file_catalogo and file_teorico and file_fisico:
         neto_teo = df_teo.groupby('SKU')['CANTIDAD'].sum().to_dict()
         neto_fis = df_fis.groupby('SKU')['CONTEO'].sum().to_dict()
         
-        # Paso B1: Consolidar ERP por [SKU + LOCALIZADOR] para evitar duplicados cuando hay múltiples lotes/proyectos
-        df_teo_agrupado = df_teo.groupby(['SKU', 'LOCALIZADOR'], as_index=False).agg({
+        llaves_cruce = ['ORGANIZACION', 'SUBINVENTARIO', 'SKU', 'LOCALIZADOR']
+
+        # Paso B1: Consolidar ERP por llave completa para evitar duplicados cuando hay múltiples lotes/proyectos
+        df_teo_agrupado = df_teo.groupby(llaves_cruce, as_index=False).agg({
             'CANTIDAD': 'sum',
-            'ORGANIZACION': agrupar_textos,
-            'SUBINVENTARIO': agrupar_textos,
             'UNIDAD_DE_MEDIDA': agrupar_textos,
             'PROYECTO': agrupar_textos,
             'TAREA': agrupar_textos,
@@ -105,40 +156,46 @@ if file_catalogo and file_teorico and file_fisico:
             'SERIAL_NUMBER': agrupar_textos
         })
 
-        # Consolidar Físico por [SKU + LOCALIZADOR] por seguridad si hubiera más de una toma en el mismo lugar
-        df_fis_agrupado = df_fis.groupby(['SKU', 'LOCALIZADOR'], as_index=False).agg({
-            'CONTEO': 'sum'
+        # Consolidar Físico por llave completa (conservando Auditor y Secuencia)
+        df_fis_agrupado = df_fis.groupby(llaves_cruce, as_index=False).agg({
+            'CONTEO': 'sum',
+            'UNIDAD_DE_MEDIDA': agrupar_textos,
+            'CONTADO_POR': agrupar_textos,
+            'SECUENCIA': agrupar_textos
         })
 
-        # Paso B2: Cruzar Registro Lógico (ERP) vs Auditoría Física por llave compuesta [SKU + LOCALIZADOR]
+        # Paso B2: Cruzar Registro Lógico (ERP) vs Auditoría Física
         df_cruce = pd.merge(
             df_teo_agrupado, 
             df_fis_agrupado, 
-            on=['SKU', 'LOCALIZADOR'], 
-            how='outer'
+            on=llaves_cruce, 
+            how='outer',
+            suffixes=('_ERP', '_CONTEO')
         )
         
+        # Unificar Unidad de Medida
+        df_cruce['UNIDAD_DE_MEDIDA'] = df_cruce['UNIDAD_DE_MEDIDA_ERP'].replace('', pd.NA).fillna(df_cruce['UNIDAD_DE_MEDIDA_CONTEO']).fillna('')
+
         # Rellenar nulos producidos por el merge outer
         df_cruce['CANTIDAD'] = df_cruce['CANTIDAD'].fillna(0)
         df_cruce['CONTEO'] = df_cruce['CONTEO'].fillna(0)
-        for col in cols_extra_teo:
+        for col in ['PROYECTO', 'TAREA', 'LOT', 'SERIAL_NUMBER', 'CONTADO_POR', 'SECUENCIA']:
             df_cruce[col] = df_cruce[col].fillna('')
         
         # Paso C: Enriquecer la matriz trayendo los datos maestros del CATÁLOGO por SKU
-        df_cruce = pd.merge(df_cruce, df_cat[['SKU', 'DESCRIPCION', 'COSTO_UNITARIO']], on='SKU', how='left')
+        df_cruce = pd.merge(df_cruce, df_cat_unico[['SKU', 'DESCRIPCION', 'COSTO_UNITARIO']], on='SKU', how='left')
         
         # Paso D: Análisis de desviaciones por línea
         df_cruce['DIFERENCIA_UNIDADES'] = df_cruce['CONTEO'] - df_cruce['CANTIDAD']
         
         # Paso E: Algoritmo de clasificación de condiciones operativas
         resultados = []
-        catalogo_lista = set(df_cat['SKU'])
+        catalogo_lista = set(df_cat_unico['SKU'])
         
         for idx, row in df_cruce.iterrows():
             sku = row['SKU']
             dif_linea = row['DIFERENCIA_UNIDADES']
             
-            # Detectar si la posición tiene atributos de trazabilidad (Lote, Serie, Proyecto o Tarea)
             tiene_atributos = any([
                 row['LOT'] != '',
                 row['SERIAL_NUMBER'] != '',
@@ -158,7 +215,6 @@ if file_catalogo and file_teorico and file_fisico:
             stk_fisico_global = neto_fis.get(sku, 0)
             dif_global = stk_fisico_global - stk_teorico_global
             
-            # Clasificación con detección de Lotes / Proyectos
             if dif_linea == 0:
                 if tiene_atributos:
                     resultados.append("REVISAR LOTES Y PROYECTOS")
@@ -201,17 +257,16 @@ if file_catalogo and file_teorico and file_fisico:
         # --- MATRIZ INTERACTIVA CON FILTRO ---
         st.markdown("### 📋 Matriz Detallada de Conciliación Multifocal")
         
-        # Filtro rápido por Resultado para aislar los ~300 ítems al instante
         opciones_filtro = ["TODOS"] + sorted(df_cruce['RESULTADO'].unique().tolist())
         filtro_sel = st.selectbox("🔍 Filtrar por Estado / Resultado:", opciones_filtro)
         
         df_filtrado = df_cruce if filtro_sel == "TODOS" else df_cruce[df_cruce['RESULTADO'] == filtro_sel]
         
         columnas_ordenadas = [
-            'SKU', 'DESCRIPCION', 'ORGANIZACION', 'SUBINVENTARIO', 'LOCALIZADOR', 
+            'ORGANIZACION', 'SUBINVENTARIO', 'LOCALIZADOR', 'SKU', 'DESCRIPCION',
             'UNIDAD_DE_MEDIDA', 'CANTIDAD', 'CONTEO', 'DIFERENCIA_UNIDADES', 
-            'RESULTADO', 'LOT', 'SERIAL_NUMBER', 'PROYECTO', 'TAREA', 
-            'COSTO_UNITARIO', 'VALOR_DESVIO'
+            'RESULTADO', 'LOT', 'SERIAL_NUMBER', 'PROYECTO', 'TAREA',
+            'SECUENCIA', 'CONTADO_POR', 'COSTO_UNITARIO', 'VALOR_DESVIO'
         ]
         
         df_mostrar = df_filtrado[columnas_ordenadas].rename(
@@ -221,7 +276,6 @@ if file_catalogo and file_teorico and file_fisico:
         st.dataframe(df_mostrar, use_container_width=True)
         
     else:
-        # Mensaje detallado indicando exactamente qué columna falta si hay error
         faltantes_cat = cols_cat_req - set(df_cat.columns)
         faltantes_teo = cols_teo_req - set(df_teo.columns)
         faltantes_fis = cols_fis_req - set(df_fis.columns)
