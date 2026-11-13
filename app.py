@@ -74,7 +74,7 @@ if file_catalogo and file_teorico and file_fisico:
     
     st.info("📊 Inicializando cruce relacional sobre el universo del Conteo Físico...")
 
-    # 2. Normalización de Encabezados
+    # 2. Normalización de Encabezados (Todas las claves en MAYÚSCULAS)
     renombres = {
         'CODIGO': 'SKU',
         'CÓDIGO': 'SKU',
@@ -98,13 +98,12 @@ if file_catalogo and file_teorico and file_fisico:
         'INVENTORY ORGANIZATION CODE': 'ORGANIZACION',
         'SUBINVENTORY': 'SUBINVENTARIO',
         'COUNTED BY': 'CONTADO_POR',
-        'Recuento realizado por': 'CONTADO_POR',
+        'RECUENTO REALIZADO POR': 'CONTADO_POR',
         'FECHA': 'FECHA_CONTEO',
         'FECHA DE CONTEO': 'FECHA_CONTEO',
         'COUNT DATE': 'FECHA_CONTEO',
         'TRANSACTION DATE': 'FECHA_TRX',
         'QUANTITY': 'CANTIDAD_TRX',
-        'CANTIDAD': 'CANTIDAD_TRX',
         'TRANSACTION TYPE': 'TIPO_TRX',
         'CAT. TRANSACCION': 'CAT_TRX',
         'TRANSACTION SOURCE REFERENCE': 'REF_ORIGEN_TRX',
@@ -227,6 +226,8 @@ if file_catalogo and file_teorico and file_fisico:
             df_trx = pd.read_csv(file_trx) if file_trx.name.endswith('.csv') else pd.read_excel(file_trx)
             df_trx.columns = df_trx.columns.astype(str).str.strip().str.upper()
             df_trx.rename(columns=renombres, inplace=True)
+            # Renombre exclusivo para Transacciones si viene como 'CANTIDAD'
+            df_trx.rename(columns={'CANTIDAD': 'CANTIDAD_TRX'}, inplace=True)
 
             cols_trx_req = {'ORGANIZACION', 'SUBINVENTARIO', 'SKU', 'LOCALIZADOR', 'FECHA_TRX', 'CANTIDAD_TRX'}
             if cols_trx_req.issubset(df_trx.columns):
@@ -302,7 +303,6 @@ if file_catalogo and file_teorico and file_fisico:
             dif_global = stk_fisico_global - stk_teorico_global
             
             # 1. Evaluar primero si hubo transacciones posteriores que expliquen el desvío
-            # Nota: Si había 10, despacharon -4 después del conteo, el ERP hoy tiene 6 -> dif_linea = 10 - 6 = +4, y neto_trx = -4 (dif_linea + neto_trx == 0)
             if cant_movs > 0:
                 if dif_linea != 0 and round(dif_linea + neto_trx, 4) == 0:
                     resultados.append("CONCILIADO POR MOV. POST-CONTEO")
@@ -350,7 +350,7 @@ if file_catalogo and file_teorico and file_fisico:
         lineas_revisar = len(df_cruce[df_cruce['RESULTADO'].str.contains("REVISAR LOTES")])
         lineas_mov_post = len(df_cruce[df_cruce['RESULTADO'].str.contains("POST-CONTEO")])
         lineas_mal = len(df_cruce[df_cruce['RESULTADO'].str.contains("MAL UBICADO")])
-        lineas_no_cat = len(df_cruce[df_cruce['RESULTADO'] == "SOBRANTE TOTAL"])
+        lineas_no_cat = len(df_cruce[df_cruce['RESULTADO'] == "SKU NO CATALOGADO"])
         
         m1.metric("Posiciones OK", f"{lineas_ok}")
         m2.metric("Revisar Lotes/Proy.", f"{lineas_revisar}")
