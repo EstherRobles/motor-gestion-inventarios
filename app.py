@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from io import BytesIO
 
 # Configuración de página ancha para mejor lectura de la matriz
 st.set_page_config(page_title="Conciliador Inteligente 3T", layout="wide")
@@ -51,6 +52,13 @@ def limpiar_numero(serie):
             return 0.0
 
     return serie.apply(parsear)
+
+# Función para convertir DataFrame a Excel en memoria
+def convertir_a_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Conciliacion_3T')
+    return output.getvalue()
 
 # El motor arranca únicamente cuando las 3 fuentes están presentes
 if file_catalogo and file_teorico and file_fisico:
@@ -144,7 +152,7 @@ if file_catalogo and file_teorico and file_fisico:
         
         llaves_cruce = ['ORGANIZACION', 'SUBINVENTARIO', 'SKU', 'LOCALIZADOR']
 
-        # Paso B1: Consolidar ERP por llave completa (evita duplicar filas cuando hay lotes/proyectos)
+        # Paso B1: Consolidar ERP por llave completa
         df_teo_agrupado = df_teo.groupby(llaves_cruce, as_index=False).agg({
             'CANTIDAD': 'sum',
             'UNIDAD_DE_MEDIDA': agrupar_textos,
@@ -162,7 +170,7 @@ if file_catalogo and file_teorico and file_fisico:
             'SECUENCIA': agrupar_textos
         })
 
-        # Paso B2: Cruzar CONTEO FÍSICO (izquierda) contra STOCK TEÓRICO (derecha) -> Solo trae lo contado
+        # Paso B2: Cruzar CONTEO FÍSICO (izquierda) contra STOCK TEÓRICO (derecha)
         df_cruce = pd.merge(
             df_fis_agrupado,
             df_teo_agrupado,
@@ -171,7 +179,7 @@ if file_catalogo and file_teorico and file_fisico:
             suffixes=('_CONTEO', '_ERP')
         )
         
-        # Unificar Unidad de Medida (prioriza ERP y si no está en ERP toma la del Conteo)
+        # Unificar Unidad de Medida
         df_cruce['UNIDAD_DE_MEDIDA'] = df_cruce['UNIDAD_DE_MEDIDA_ERP'].replace('', pd.NA).fillna(df_cruce['UNIDAD_DE_MEDIDA_CONTEO']).fillna('')
 
         # Rellenar nulos para ítems contados que tenían 0 en el ERP
@@ -272,6 +280,30 @@ if file_catalogo and file_teorico and file_fisico:
         )
         
         st.dataframe(df_mostrar, use_container_width=True)
+
+        # --- BOTONES DE DESCARGA (EXCEL Y CSV) ---
+        st.markdown("### 📥 Exportar Resultados")
+        btn1, btn2, _ = st.columns([1, 1, 2])
+        
+        nombre_base = f"conciliacion_3T_{filtro_sel.lower().replace(' ', '_').replace('/', '_')}"
+        
+        with btn1:
+            st.download_button(
+                label="📗 Descargar Excel (.xlsx)",
+                data=convertir_a_excel(df_mostrar),
+                file_name=f"{nombre_base}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            
+        with btn2:
+            # utf-8-sig asegura que Excel abra las tildes y ñ sin caracteres raros
+            csv_data = df_mostrar.to_csv(index=False, sep=';', decimal=',').encode('utf-8-sig')
+            st.download_button(
+                label="📄 Descargar CSV (.csv)",
+                data=csv_data,
+                file_name=f"{nombre_base}.csv",
+                mime="text/csv"
+            )
         
     else:
         faltantes_cat = cols_cat_req - set(df_cat.columns)
